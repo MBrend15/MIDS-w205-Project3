@@ -29,7 +29,7 @@ First let's make a template table
 
 ```{r cars}
 
-num_players <- 10
+num_players <- 1000
 
 d <- data.table(
   id = rep(1:num_players, each = 11), #create slots for 10 months for each player
@@ -45,7 +45,7 @@ d <- data.table(
 
 Now let's fill in the table, first for num of sub and ten month each
 ```{r }
-
+d[, id := sample(100001:300000, size = 1), keyby = id]
 #build in randomly assigned swords and guilds and subs, i.e. start the experiment 
 d[, sword := sample(c(0,1), size = 1, prob = c(.9, .1)), keyby = id ]
 d[, guild := sample(c(0,1), size = 1, prob = c(.9, .1)), by = id]
@@ -89,16 +89,13 @@ for(cur_mon in 1:10){
   d[month == cur_mon, sub := ifelse(d$sub[d$month == cur_mon - 1] == 0 & #if a player was not a subscriber last month
                                       #and a player played more than 14 hours last month
                                       d$mon_hrs_played[d$month == cur_mon - 1] > 14, 
-                                    #then they have a 10% likelihood of subscribing
-                                      sample(c(0,1), size = .N, prob = c(.1,.9), replace = TRUE),
-                                    #else if the player was a subscriber last month and then played more than 14 hours
-                                      ifelse(d$sub[d$month == cur_mon - 1] == 1 & 
-                                               d$mon_hrs_played[d$month == cur_mon - 1] > 14,
-                                             #they have a 2% chance of unsubscribing
-                                             sample(c(0,1), size = .N, prob = c(.02,.98), replace = TRUE),
-                                             #else if they played less 14 hours, either as a subscriber or non 
-                                             #subscriber then a player has a 30% of subscribing
-                                             sample(c(0,1), size = .N, prob = c(.7,.3), replace = TRUE)))]
+                                    #then they have a 70% likelihood of subscribing
+                                      sample(c(0,1), size = .N, prob = c(.3,.7), replace = TRUE),
+                                    #else if the player was a subscriber last month they stay a sub
+                                      ifelse(d$sub[d$month == cur_mon - 1] == 1,  1,
+                                             #else if they played less 14 hours, and weren't a sub, then
+                                             #then a player has a 20% of subscribing
+                                             sample(c(0,1), size = .N, prob = c(.8,.2), replace = TRUE)))]
   #account closed
   d[month == cur_mon, acct_open := ifelse(d$acct_open[d$month == cur_mon-1] == 1 &  
                                             #if players have an open account and
@@ -109,7 +106,7 @@ for(cur_mon in 1:10){
                                           #else, if their account was already closed last month, there's a 2%
                                           #chance they will come back
                                           ifelse(d$acct_open[d$month == cur_mon - 1] == 0, 
-                                                 sample(c(0,1),size = .N, prob = c(.98, .02), replace = TRUE),
+                                                 0,
                                                  #if it was open and they played more than 13 hours, they have a 1%
                                                  #chance of closing
                                             sample(c(0,1),size = .N, prob = c(.005,.995), replace = TRUE)))]
@@ -134,28 +131,26 @@ for(cur_mon in 1:10){
     #if the player is either in sword or guild
     d$mon_hrs_played[d$month == cur_mon] > 14 & d$sub[d$month == cur_mon] == 1,
     #then payment is a monthly logistic regression up to $20 a month 
-      d$money_paid[d$month == 0] + 15/(1+exp(-1*((cur_mon+10)-4)))+rnorm(.N,0,1) +5,
+      abs(d$money_paid[d$month == 0] + 15/(1+exp(-1*((cur_mon+10)-4)))+rnorm(.N,0,1) +5),
     #if you are just a normal subscriber then $5 monthly plus slightly more random spending 
     ifelse(d$sub[d$month == cur_mon] == 1,
-           d$money_paid[d$month == 0] + 5 + rnorm(.N,0,.5),
+           abs(d$money_paid[d$month == 0] + 5 + rnorm(.N,0,.5)),
            #non-subscribers pay around $5 a month
-            rnorm(.N, 5, 2)))]
+            abs(rnorm(.N, 5, 2))))]
   
   #now friend referral, pull from 3 distributions based on 3 stratas
   d[month == cur_mon, mon_fr_ref := ifelse(
     #if a player plays less than 12 hours a month, draw from a dist of 1 with sd .5, and round
     d$mon_hrs_played[d$month == cur_mon] < 12,
-    round(rnorm(.N, 1, .5)),
+    abs(round(rnorm(.N, 1, .5))),
     #else if the player between 12 and 16 hrs, draw from a distribution with mean 2 and sd .5 and round
     ifelse(
       12 <= d$mon_hrs_played[d$month == cur_mon] & 
         d$mon_hrs_played[d$month == cur_mon] < 16,
-      round(rnorm(.N, 2, .5)),
+      abs(round(rnorm(.N, 2, .5))),
       #anything above 16, draw from a distribution of 4 with sd .5
-      round(rnorm(.N, 4, .5))
-    )
-  )]
-  
+      abs(round(rnorm(.N, 4, .5)))
+    ))]
   
   #multiply all rate stats by account closed
   d[, money_paid := money_paid*acct_open]
@@ -169,7 +164,9 @@ for(cur_mon in 1:10){
 
 }
 
-write.csv(d, 'sample_data_v3.csv')
+summary(d[, money_paid])
+
+#write.csv(d, 'sample_data_v7.csv')
 
 ```
 
@@ -198,6 +195,11 @@ d[, mon_hrs_played := rnorm(.N, 15, 3)*ifelse(
   xor(sword, guild), 1.2, 1) * ifelse(sword & guild, 1.08, 1) 
   ]
 
+summary(rep(ifelse(round(rnorm(.N, 1, .5)) > 0, round(rnorm(.N, 1, .5)), 0),100000))
+
+ifelse(test2 = round(rnorm(.N, 2, .5)) > 0, test2 , 0)
+
+help(":=")
 
 ```
 
